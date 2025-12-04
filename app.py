@@ -7,6 +7,7 @@ from catboost import CatBoostClassifier
 from neo4j import GraphDatabase
 import plotly.express as px
 import plotly.graph_objects as go
+from streamlit_agraph import agraph, Node, Edge, Config
 
 st.set_page_config(page_title="HR Strategic Dashboard", layout="wide", page_icon="🏢")
 
@@ -60,8 +61,8 @@ def load_ml_models():
 
 model, feature_names = load_ml_models()
 
-st.title("🏢 HR Strategic Intelligence System")
-st.markdown("Sistem pendukung keputusan berbasis **Graph Database** & **Machine Learning** untuk retensi karyawan.")
+st.title("HR Strategic Intelligence System")
+st.markdown("Sistem pendukung keputusan berbasis Graph Database & Machine Learning untuk retensi karyawan.")
 st.caption("Kelompok 9 - Analisis Attrition")
 
 if not get_driver(db_uri, db_user, db_pass):
@@ -89,12 +90,13 @@ if kpi_data:
     col4.metric("Threshold Model", "27.9%")
     st.divider()
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "Peta Risiko Departemen", 
     "Monitor Karyawan High-Risk", 
     "Analisis Akar Masalah", 
     "Laporan & Solusi",
-    "Kalkulator Risiko Individu"
+    "Kalkulator Risiko Individu",
+    "Graph Explorer"
 ])
 
 with tab1:
@@ -460,6 +462,140 @@ with tab5:
                         
             except Exception as e:
                 st.error(f"Terjadi kesalahan saat memproses data: {e}")
+
+from streamlit_agraph import agraph, Node, Edge, Config
+
+with tab6:
+    st.subheader("Graph Explorer")
+    st.caption("Visualisasi topologi jaringan berdasarkan jenis relasi.")
+
+    c_ctrl1, c_ctrl2 = st.columns([1, 3])
+    
+    with c_ctrl1:
+        st.markdown("**Pengaturan Graph**")
+        
+        rel_type = st.selectbox(
+            "Pilih Pola Relasi:",
+            [
+                "SEMUA RELASI",
+                "HAS_ROLE (Employee ➡ JobRole)", 
+                "WORKS_IN (Employee ➡ Department)",
+                "INCLUDES_ROLE (Department ➡ JobRole)"
+            ]
+        )
+        
+        limit_nodes = st.slider("Jumlah Limit Path", 10, 100, 25)
+        
+        st.markdown("""
+        🔴 High Risk Emp
+
+        🟢 Low Risk Emp 
+                
+        🔵 Department
+                
+        🟠 Job Role
+        """)
+
+    with c_ctrl2:
+        base_query = ""
+        
+        if "HAS_ROLE" in rel_type:
+            base_query = f"""
+            MATCH (a)-[r:HAS_ROLE]->(b)
+            RETURN a, labels(a) as a_labels, type(r) as rel, b, labels(b) as b_labels
+            LIMIT {limit_nodes}
+            """
+        elif "WORKS_IN" in rel_type:
+            base_query = f"""
+            MATCH (a)-[r:WORKS_IN]->(b)
+            RETURN a, labels(a) as a_labels, type(r) as rel, b, labels(b) as b_labels
+            LIMIT {limit_nodes}
+            """
+        elif "INCLUDES_ROLE" in rel_type:
+            base_query = f"""
+            MATCH (a)-[r:INCLUDES_ROLE]->(b)
+            RETURN a, labels(a) as a_labels, type(r) as rel, b, labels(b) as b_labels
+            LIMIT {limit_nodes}
+            """
+        else:
+            base_query = f"""
+            MATCH (a)-[r:HAS_ROLE|WORKS_IN|INCLUDES_ROLE]->(b)
+            RETURN a, labels(a) as a_labels, type(r) as rel, b, labels(b) as b_labels
+            LIMIT {limit_nodes}
+            """
+
+        results = run_cypher(base_query)
+        
+        nodes = []
+        edges = []
+        added_ids = set()
+
+        if not results:
+            st.warning("⚠️ Data tidak ditemukan untuk relasi ini. Pastikan relasi (Edge) tersebut sudah dibuat di database.")
+        else:
+            for row in results:
+                def process_node(node_data, node_labels):
+                    n_id = ""
+                    n_label = ""
+                    n_color = "#999999"
+                    n_shape = "dot"
+                    n_title = ""
+                    
+                    if "Employee" in node_labels:
+                        n_id = str(node_data.get('EmployeeID', 'Unknown'))
+                        risk = node_data.get('AttritionRisk', 0)
+                        n_label = f"Emp {n_id}"
+                        n_color = "#ff4b4b" if risk >= 0.279 else "#00e676"
+                        n_shape = "dot"
+                        n_title = f"Risk: {risk:.1%}"
+                    
+                    elif "Department" in node_labels:
+                        n_id = node_data.get('name', 'Unknown Dept')
+                        n_label = n_id
+                        n_color = "#29b6f6"
+                        n_shape = "hexagon"
+                    
+                    elif "JobRole" in node_labels:
+                        n_id = node_data.get('name', 'Unknown Role')
+                        n_label = n_id
+                        n_color = "#ffa726"
+                        n_shape = "diamond"
+                    
+                    else:
+                        n_id = str(node_data.get('name', str(node_data)))
+                        n_label = n_id
+                    
+                    return n_id, n_label, n_shape, n_color, n_title
+
+                src_id, src_lbl, src_shape, src_col, src_title = process_node(row['a'], row['a_labels'])
+                if src_id not in added_ids:
+                    nodes.append(Node(id=src_id, label=src_lbl, shape=src_shape, color=src_col, title=src_title, size=20))
+                    added_ids.add(src_id)
+
+                tgt_id, tgt_lbl, tgt_shape, tgt_col, tgt_title = process_node(row['b'], row['b_labels'])
+                if tgt_id not in added_ids:
+                    nodes.append(Node(id=tgt_id, label=tgt_lbl, shape=tgt_shape, color=tgt_col, title=tgt_title, size=20))
+                    added_ids.add(tgt_id)
+
+                rel_name = row['rel']
+                edge_id = f"{src_id}-{rel_name}-{tgt_id}"
+                edges.append(Edge(source=src_id, target=tgt_id, label=rel_name, color="#bdc3c7"))
+
+            config = Config(
+                width="100%",
+                height=600,
+                directed=True, 
+                physics=True, 
+                hierarchical=False,
+                nodeHighlightBehavior=True,
+                highlightColor="#F7A7A6"
+            )
+            
+            st.success(f"Menampilkan **{len(results)}** lintasan relasi.")
+            agraph(nodes=nodes, edges=edges, config=config)
+            
+            with st.expander("🔍 Lihat Query Cypher yang Dijalankan"):
+                st.code(base_query, language='cypher')
 
 st.markdown("---")
 st.caption("© 2025 Kelompok 9 - Final Project RSBP")
