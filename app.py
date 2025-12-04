@@ -85,7 +85,7 @@ if kpi_data:
     
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Karyawan", f"{total:,}")
-    col2.metric("Karyawan High Risk", f"{risk}", delta=f"-{risk_pct:.1f}%", delta_color="inverse")
+    col2.metric("Karyawan High Risk", f"{risk}", delta=f"{risk_pct:.1f}%", delta_color="inverse")
     col3.metric("Rata-rata Risiko Organisasi", f"{kpi['avg_risk']:.2%}")
     col4.metric("Threshold Model", "27.9%")
     st.divider()
@@ -192,7 +192,7 @@ with tab2:
     df_graph = pd.DataFrame(run_cypher(q_graph))
     if not df_graph.empty:
         df_graph.index = np.arange(1, len(df_graph) + 1)
-        st.caption(f"Menampilkan **{len(df_graph)}** Karyawan Berisiko Tertinggi (Di atas Threshold 27.9%):")
+        st.caption(f"Menampilkan **{len(df_graph)}** Karyawan Berisiko Tertinggi:")
         
         df_graph['Risk'] = df_graph['Risk'].apply(lambda x: f"{x:.1%}")
         df_graph['Gaji'] = df_graph['Gaji'].apply(lambda x: f"${x:,}")
