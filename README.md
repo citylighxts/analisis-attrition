@@ -18,7 +18,7 @@ Live Demo: [Analysis Attrition](https://attrition-analysis.streamlit.app)
 
 ## Performa Model
 - **Algoritma:** CatBoost Classifier
-- **Akurasi CV Terbaik:** 86.2%
+- **Akurasi CV Terbaik:** 85%
 - **Skor ROC AUC:** 0.837
 - **Top 5 Prediktor:** OverTime, JobRole, StockOptionLevel, Age, TotalSatisfication.
 
