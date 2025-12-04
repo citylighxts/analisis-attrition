@@ -4,3 +4,6 @@ catboost
 pandas
 plotly
 numpy
+seaborn
+scikit-learn
+optuna
